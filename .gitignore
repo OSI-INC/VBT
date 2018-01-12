@@ -1,7 +1,10 @@
-# Build Directories *
-example_build_directory/*
+# Build Directories #
+#####################
+# We ignore the contents of build directories, but not the
+# directories themselves.
 build/*
 temp_frames/*
+build_*/*
 
 # Videos #
 *.avi

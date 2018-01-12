@@ -6,7 +6,8 @@
 --- Website        : opensourceinstruments.com
 ----------------------------------------------
 */
-using namespace std;
+
+// Include files.
 #include "Blob.h"
 #include "nms.h"
 #include <fstream>
@@ -17,9 +18,13 @@ using namespace std;
 #include<opencv2/highgui/highgui.hpp>
 #include<opencv2/imgproc/imgproc.hpp>
 #include<iostream>
-#define SHOW_STEPS // un-comment | comment this line to show steps or not
+using namespace std;
 
-// User defined settings
+// Debug constants.
+const int VERBOSE = 0;
+const int MANUAL_ROI = 1;
+
+// Blob tracking constants.
 const int brightness_threshold_low = 55;
 const int brightness_threshold_high = 255;
 const int edge_thresh_low = 235;
@@ -31,9 +36,9 @@ const int minBlobRectArea = 100;//pixels
 const int minBlobWidth = 20;//pixels
 const int minBlobHeight = 20;//pixels
 const int minBlobDiagonal = 20;//pixels
-const int minBlobAreaDividedByRectArea = .2;//unitless
+const double minBlobAreaDividedByRectArea = 0.2;//unitless
 
-// User defined display windows
+// User defined display windows.
 const bool show_darknessBinary = true;
 const bool show_edgeDetect = true;
 const bool show_finalBinary = false;
@@ -43,7 +48,7 @@ const bool show_currentFrameBlobs = false;
 const bool show_blobs = false;
 const bool show_finalResult = true;
 
-// const global variables
+// Global structured constants.
 const cv::Scalar SCALAR_BLACK = cv::Scalar(0.0, 0.0, 0.0);
 const cv::Scalar SCALAR_WHITE = cv::Scalar(255.0, 255.0, 255.0);
 const cv::Scalar SCALAR_YELLOW = cv::Scalar(0.0, 255.0, 255.0);
@@ -55,8 +60,7 @@ const cv::Mat structuringElement5x5 = cv::getStructuringElement(cv::MORPH_RECT, 
 const cv::Mat structuringElement7x7 = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(7, 7));
 const cv::Mat structuringElement15x15 = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(15, 15));
 
-
-// function prototypes
+// Function prototypes.
 void matchCurrentFrameBlobsToExistingBlobs(std::vector<Blob> &existingBlobs, std::vector<Blob> &currentFrameBlobs);
 void addBlobToExistingBlobs(Blob &currentFrameBlob, std::vector<Blob> &existingBlobs, int &intIndex);
 void addNewBlob(Blob &currentFrameBlob, std::vector<Blob> &existingBlobs);
@@ -67,55 +71,92 @@ void saveContours(cv::Size imageSize, std::vector<Blob> blobs, std::string strIm
 void drawBlobInfoOnImage(std::vector<Blob> &blobs, cv::Mat &imgFrame2Copy);
 void nmsBlobs(std::vector<Blob> &blobs);
 void drawRectInfoOnImage(std::vector<cv::Rect> &rects, cv::Mat &imgFrame2Copy);
-// global variables
+
+// Global variables.
 std::stringstream date;
 std::vector<cv::Rect> resRects;
 cv::Rect region_of_interest;
 
-int main(void) {				    
-    cv::VideoCapture capVideo;
-    cv::Mat imgFrame1;
-    cv::Mat imgFrame2;
-    std::vector<Blob> blobs;	
-
-    // working directory is assumed to be local_parent/vbt/build
-    // Videos are assumed to be in local_parent
-    capVideo.open("../../2mice.avi");
-
-    if (!capVideo.isOpened()) {                                                 // if unable to open video file
-        std::cout << "error reading video file" << std::endl << std::endl;      // show error message
-        return(0);                                                              // and exit program
+int main(int argc, char *argv[]) {
+	cv::VideoCapture capVideo;
+	cv::VideoWriter outputVideo;  
+	cv::Mat imgFrame1;
+	cv::Mat imgFrame2;
+	std::vector<Blob> blobs;	
+	string input_file;
+	string output_file;
+	
+	if (argc > 1) {
+		input_file = argv[1];
+    } else {
+		std::cout << "ERROR: No input file specified." << std::endl;	
+		std::cout << "Usage: " << argv[0] << 
+			" <input_filename> ?output_filename?" << std::endl;
+		return -1;
     }
+    cout << "Input File: " << input_file << std::endl;
 
-    if (capVideo.get(CV_CAP_PROP_FRAME_COUNT) < 2) {
-        std::cout << "error: video file must have at least two frames";
-        return(0);
+	capVideo.open(input_file);
+
+	if (!capVideo.isOpened()) {
+		std::cout << "ERROR: Failed to open " << input_file << std::endl;	 
+		return -1;
+	}
+	std::cout << "Opened " << input_file << " for reading." << std::endl;
+
+	int framecount = capVideo.get(CV_CAP_PROP_FRAME_COUNT);
+	int codec = capVideo.get(CV_CAP_PROP_FOURCC);
+	cv::Size dimensions = cv::Size(
+		(int) capVideo.get(CV_CAP_PROP_FRAME_WIDTH), 
+		(int) capVideo.get(CV_CAP_PROP_FRAME_HEIGHT) );
+	int framerate = capVideo.get(CV_CAP_PROP_FPS);
+
+	std::cout << "Frame count: " << framecount << std::endl;
+	std::cout << "Frame dimensions: " << dimensions << std::endl;  
+	std::cout << "Frame rate: " << framerate << " fps." << std::endl;
+	if (codec != 0) {	
+		std::cout << "Codec: " << codec << "\n";
+	} {
+		std::cout << "Warning: failed to learn input video codec." << std::endl;
+	}
+	if (framecount < 2) {
+		std::cout << "ERROR: Frame count less than two." << std::endl;
+		return -1;
+	}
+
+    // Define a region of interest to which the input images will be cropped before
+    // processing. The output image must have dimensions matching the cropped region.
+    if (MANUAL_ROI > 0) {
+    	region_of_interest = cv::Rect(64,0,512,480);
+    } else {
+    	region_of_interest = cv::Rect(0,0,
+    		capVideo.get(CV_CAP_PROP_FRAME_WIDTH),
+    		capVideo.get(CV_CAP_PROP_FRAME_HEIGHT));
     }
-    std::cout << "Frame size is: " << unsigned(capVideo.get(3)) << "x" << unsigned(capVideo.get(4)) << std::endl << std::endl;      
+    cv::Size output_dimensions = cv::Size(
+    	(int) region_of_interest.width, 
+    	(int) region_of_interest.height);
 
-    // Hard definition of the region of interest
-    region_of_interest = cv::Rect(64,0,512,480);//uncomment to define ROI manually
-    //region_of_interest = cv::Rect(0,0,capVideo.get(3),capVideo.get(4)); //uncomment to use ROI filling full original frame
-
-    /* Video Output */
-    cv::VideoWriter outputVideo;                    // Open the output
-    int ex = static_cast<int>(capVideo.get(CV_CAP_PROP_FOURCC));
-    // Output video size matches region of interest size
-    cv::Size S = cv::Size((int) region_of_interest.width, (int) region_of_interest.height);
-    // Output video goes to same directory as source video
-    const string NAME = "../../output.avi"; 
-    const bool askOutputType = 0; // If false it will use the inputs codec type
-    if (askOutputType)
-        outputVideo.open(NAME, ex=-1, capVideo.get(CV_CAP_PROP_FPS), S, true);
-    else
-        outputVideo.open(NAME, CV_FOURCC('M','J','P','G'), capVideo.get(CV_CAP_PROP_FPS), S, true);
-
-    if (!outputVideo.isOpened())
-    {
-        std::cout << "Could not open output video for write:" << std::endl << std::endl;      // show error message
-        return -1;
+	if (argc > 2) {
+		output_file = argv[2];
+    	cout << "Output File: " << output_file << std::endl;
+		outputVideo.open(output_file, 
+			CV_FOURCC('M','P','E','G'), 
+			framerate, 
+			output_dimensions, 
+			true);
+		if (!outputVideo.isOpened()) {
+			std::cout << "WARNING: Failed to open " << output_file << 
+				" for writing." << std::endl;
+			output_file = "";
+		} else {
+			std::cout << "Opened " << output_file << 
+			" for writing with MPEG compression." << std::endl;
+		}
+	} else {
+		output_file = "";
+		cout << "No output file specified, none will be written." << std::endl;
     }
-
 
     bool ret = true;
     ret =  capVideo.read(imgFrame1);
@@ -126,7 +167,6 @@ int main(void) {
     char chCheckForEscKey = 0;
     bool blnFirstFrame = true;
     int frameCount = 2;
-
 
     while (capVideo.isOpened() && chCheckForEscKey != 27) {
         cv::Mat imgThresh; // holds final thresholded image
@@ -140,18 +180,19 @@ int main(void) {
         //cv::Mat motion; //uncomment for motion detection
         */
 
-        /* Show RGB channels separately - MC*/
+        // Show RGB channels separately - MC
         //Note: OpenCV uses BGR color order
         /*
         cv::Mat bgr[3];   //destination array
         split(imgFrame1Copy,bgr);//split source
-        /*
         cv::imshow("blue",bgr[0]); //blue channel
         cv::imshow("green",bgr[1]); //green channel
         cv::imshow("red",bgr[2]); //red channel
-        /* End RGB separation*/
+        */
+        // End RGB separation 
         
-        /* Get HSV representation
+        // Get HSV representation
+        /*
         cv::Mat cHSV;
         cv::cvtColor(imgFrame1Copy, cHSV,CV_BGR2HSV);
         */
@@ -299,11 +340,21 @@ int main(void) {
         cv::imshow("finalResult", imgFrame1Copy);
         }
 
-        outputVideo.write(imgFrame1Copy);
-        std::cout << "Frame number" << unsigned(frameCount) << std::endl << std::endl; //Displays progress
+		if (output_file != "") {
+	        outputVideo.write(imgFrame1Copy);
+    	    if (VERBOSE > 0) {
+	    	    std::cout << "Frame number " << unsigned(frameCount) 
+	    	    << " processed and written." << std::endl;
+			}
+		} else {
+    	    if (VERBOSE > 0) {
+	    	    std::cout << "Frame number " << unsigned(frameCount) 
+	    	    << " processed." << std::endl;
+			}
+		}
 
-
-        /* For Frame-by-Frame visualization
+        // For Frame-by-Frame visualization
+        /*
         if(frameCount > 10 && frameCount < 12) {// Prints frames between count params
             char filename [50];
             char blobname [50];
@@ -315,7 +366,8 @@ int main(void) {
             cv::imwrite(filename,imgFrame1Copy,compression_params);
             saveContours(imgThresh.size(), currentFrameBlobs, blobname);
         }
-        /* End frame-by-frame visualization*/
+        */
+        // End frame-by-frame visualization
 
 		
         // now we prepare for the next iteration
@@ -327,23 +379,23 @@ int main(void) {
             ret = capVideo.read(imgFrame1);
             //ret = capVideo.read(imgFrame2);//uncomment for motion detection
             if (ret == false) {return(0);}
-        }
-        else {
-            std::cout << "end of video\n";
+        } else {
+            std::cout << "End of video." << std::endl;
             break;
         }
 
         blnFirstFrame = false;
         frameCount++;
         chCheckForEscKey = cv::waitKey(1);
-        }
+    }
 
-        if (chCheckForEscKey != 27) {               // if the user did not press esc (i.e. we reached the end of the video)
-            cv::waitKey(0);                         // hold the windows open to allow the "end of video" message to show
-        }
+	if (chCheckForEscKey != 27) {               // if the user did not press esc (i.e. we reached the end of the video)
+		cv::waitKey(0);                         // hold the windows open to allow the "end of video" message to show
+	}
 
-            // note that if the user did press esc, we don't need to hold the windows open, we can simply let the program end which will close the windows
-            return(0);
+	// note that if the user did press esc, we don't need to hold the windows open, we can simply 
+	// let the program end which will close the windows
+	return(0);
 }
 
 
@@ -469,7 +521,7 @@ void nmsBlobs(std::vector<Blob> &blobs) {
             rectScores.push_back(blobs[i].currentBoundingRect.area());
         }
     }
-    //std::cout << "Number of src rects is:" << unsigned(srcRects.size()) << std::endl << std::endl;
+    //std::cout << "Number of src rects is:" << unsigned(srcRects.size()) << std::endl;
     nms2(srcRects,rectScores,resRects,.4f,0,0);
 }
 
@@ -483,7 +535,10 @@ void nmsBlobs(std::vector<Blob> &blobs) {
 }*/
 
 void drawRectInfoOnImage(std::vector<cv::Rect> &rects, cv::Mat &imgFrame1Copy) {
-    std::cout << "Number of src rects is:" << unsigned(rects.size()) << std::endl << std::endl;      // show error message
+    if (VERBOSE > 0) {
+    	std::cout << "Number of src rects is: " << 
+    		unsigned(rects.size()) << std::endl;
+    }
     for (unsigned int i = 0; i < rects.size(); i++) {
     cv::rectangle(imgFrame1Copy, rects[i], SCALAR_RED, 2);
     }
