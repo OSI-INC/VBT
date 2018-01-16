@@ -19,7 +19,7 @@ Blob identity is typically lost when a rodent is obscured for a prolonged period
 First step is to install OpenCV. Both OpenCV and the VBT builds are managed by the CMake utility so we build on MacOS, Windows, and Linux. When working on the VBT code, we assume you will be using Git to download the VBT repository and keep track of your own changes.
 
 
-###MacOS:
+### MacOS:
 
 Download OpenCV. We used this link:
 
@@ -49,7 +49,7 @@ Run the VBT executable and pass it the name of a video to process. You may pass 
 The above command applies blob tracking to the Mouse.mp4 video and produces Out.mp4.
 
 
-###Windows 32-Bit
+### Windows 32-Bit
 
 Download OpenCV using a link something like this:
 
@@ -82,7 +82,7 @@ The build takes twenty minutes. Now download the VBT repository and build.
 If you get the error "unrecognised command line option -std=c++11", you must update the MSYS c-compiler so that it supports the C++11 standard. Now add directory ~/OpenCV/build_windows32/bin to the MSYS path. 
 
 
-###Linux 32-Bit
+### Linux 32-Bit
 
 Install CMake and gcc-c++ with the following commands or equivalent for your version of Linux:
 
@@ -113,7 +113,7 @@ Now download the VBT repository and build.
 If the build fails with "unrecognised command line option -std=c++11", you must update your c-compiler so that it supports the c++11 standard.
 
 
-###Linux 64-Bit
+### Linux 64-Bit
 
 Install CMake and gcc-c++ with the following commands or equivalent for your version of Linux:
 
