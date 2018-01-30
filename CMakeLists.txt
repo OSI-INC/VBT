@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 2.6)
 
 project(VBT)
 
-add_compile_options(-std=c++11)
+#Orignal project used C++11 syntax, but we deprecated the syntax so we could
+#compile on Scientific Linux.
+#add_compile_options(-std=c++11)
 
 find_package(OpenCV REQUIRED)
 

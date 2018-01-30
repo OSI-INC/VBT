@@ -75,11 +75,17 @@ The build takes twenty minutes. Now download the VBT repository and build.
 	cd VBT
 	mkdir build_windows32
 	cd build_windows32
-	export OpenCV_DIR="../../OpenCV/build_macos"
+	export OpenCV_DIR="../../OpenCV/build_windows32"
 	cmake -D OpenCV_DIR=$OpenCV_DIR -G "MSYS Makefiles" ..
 	make
 
-If you get the error "unrecognised command line option -std=c++11", you must update the MSYS c-compiler so that it supports the C++11 standard. Now add directory ~/OpenCV/build_windows32/bin to the MSYS path. 
+If you get the error "unrecognised command line option -std=c++11", you must update the MSYS c-compiler so that it supports the C++11 standard. Now add the following directory to your MSYS path, or your default DOS environment path.
+
+~/OpenCV/build_windows32/bin 
+
+If you don’t add the above path, VBT will abort with an error saying Windows cannot find library libopencv_core2413.dll. The following command will run the blob tracking on Mouse.mp4 and produce Out.mp4.
+
+	VBT ../../Videos/Mouse.mp4 Out.mp4
 
 
 ### Linux 32-Bit

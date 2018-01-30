@@ -1,6 +1,7 @@
 #pragma once
 #include <opencv2/opencv.hpp>
 #include <assert.h>
+#include <iterator>
 
 /**
  * @brief nms
@@ -36,14 +37,15 @@ inline void nms(
     while (idxs.size() > 0)
     {
         // grab the last rectangle
-        auto lastElem = --std::end(idxs);
+        std::multimap<int, size_t>::iterator lastElem;
+        lastElem = --std::end(idxs);
         const cv::Rect& rect1 = srcRects[lastElem->second];
 
         int neigborsCount = 0;
 
         idxs.erase(lastElem);
 
-        for (auto pos = std::begin(idxs); pos != std::end(idxs); )
+        for (std::multimap<int, size_t>::iterator pos = std::begin(idxs); pos != std::end(idxs); )
         {
             // grab the current rectangle
             const cv::Rect& rect2 = srcRects[pos->second];
@@ -109,7 +111,8 @@ inline void nms2(
     while (idxs.size() > 0)
     {
         // grab the last rectangle
-        auto lastElem = --std::end(idxs);
+        std::multimap<float, size_t>::iterator lastElem;
+        lastElem = --std::end(idxs);
         const cv::Rect& rect1 = srcRects[lastElem->second];
 
         int neigborsCount = 0;
@@ -117,7 +120,7 @@ inline void nms2(
 
         idxs.erase(lastElem);
 
-        for (auto pos = std::begin(idxs); pos != std::end(idxs); )
+        for (std::multimap<float, size_t>::iterator pos = std::begin(idxs); pos != std::end(idxs); )
         {
             // grab the current rectangle
             const cv::Rect& rect2 = srcRects[pos->second];
