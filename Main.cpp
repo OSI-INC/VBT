@@ -22,22 +22,24 @@
 using namespace std;
 
 // Debug constants.
-const int VERBOSE = 0;
+const int VERBOSE = 1;
 const int MANUAL_ROI = 0;
+const long start_time = 1522435249081; //assumes 500 ms latency
 
 // Blob tracking constants.
 const int brightness_threshold_low = 55;
 const int brightness_threshold_high = 255;
 const int edge_thresh_low = 235;
 const int edge_thresh_high = 255;
-const int blur_size = 5;//pixels
-const int minimum_blob_separation = 50;//pixels
+const int blur_size = 1;//pixels
+const int minimum_blob_separation = 120;//pixels
 const int blob_persistency= 5;//number of frames
 const int minBlobRectArea = 100;//pixels
-const int minBlobWidth = 20;//pixels
-const int minBlobHeight = 20;//pixels
-const int minBlobDiagonal = 20;//pixels
-const double minBlobAreaDividedByRectArea = 0.2;//unitless
+const int minBlobWidth = 60;//pixels
+const int minBlobHeight =60 ;//pixels
+const int minBlobDiagonal = 75;//pixels
+const double minBlobAreaDividedByRectArea = 0.5;//unitless
+std::ofstream output("output_blobs.txt");
 
 // User defined display windows.
 const bool show_darknessBinary = true;
@@ -167,7 +169,7 @@ int main(int argc, char *argv[]) {
 
 	char chCheckForEscKey = 0;
 	bool blnFirstFrame = true;
-	int frameCount = 2;
+	int frameCount = 1;
 
 	while (capVideo.isOpened() && chCheckForEscKey != 27) {
 		cv::Mat imgThresh; // holds final thresholded image
@@ -247,7 +249,7 @@ int main(int argc, char *argv[]) {
 			cv::dilate(dark, dark, structuringElement3x3);
 			cv::dilate(dark, dark, structuringElement3x3);
 			cv::dilate(dark, dark, structuringElement5x5);
-			cv::dilate(dark, dark, structuringElement5x5);
+			//cv::dilate(dark, dark, structuringElement5x5);
 		}
 		// Add the darkness thresholded image and the edge detected image
 		bitwise_not (grad,grad);
@@ -335,7 +337,9 @@ int main(int argc, char *argv[]) {
 
 		nmsBlobs(blobs);//Non-maxima supression
 		//sortRectangles(resRects);//Function not yet functional
+                output << long(start_time)+(long(frameCount)-1)*50 << " ";
 		drawBlobInfoOnImage(blobs, imgFrame1Copy);
+                output << std::endl;
 		drawRectInfoOnImage(resRects, imgFrame1Copy);
 
 		if (show_finalResult) {
@@ -377,7 +381,8 @@ int main(int argc, char *argv[]) {
 
 		//imgFrame1 = imgFrame2.clone();// move frame 1 up to where frame 2 is//uncomment for motion detection
 
-		if ((capVideo.get(CV_CAP_PROP_POS_FRAMES) + 1) < capVideo.get(CV_CAP_PROP_FRAME_COUNT)) {
+		//if ((capVideo.get(CV_CAP_PROP_POS_FRAMES) + 1) < capVideo.get(CV_CAP_PROP_FRAME_COUNT)) {//uncomment for motion detection
+                if(frameCount < framecount) {
 			ret = capVideo.read(imgFrame1);
 			//ret = capVideo.read(imgFrame2);//uncomment for motion detection
 			if (ret == false) {return(0);}
@@ -402,6 +407,8 @@ int main(int argc, char *argv[]) {
 
 
 void matchCurrentFrameBlobsToExistingBlobs(std::vector<Blob> &existingBlobs, std::vector<Blob> &currentFrameBlobs) {
+        unsigned int number_matches_w_old_blobs = 0;
+        unsigned int number_matches_w_new_blobs = 0;
 	for (unsigned int i = 0; i < existingBlobs.size(); i++) {
 		existingBlobs[i].blnCurrentMatchFoundOrNewBlob = false;
 		existingBlobs[i].predictNextPosition();
@@ -416,28 +423,39 @@ void matchCurrentFrameBlobsToExistingBlobs(std::vector<Blob> &existingBlobs, std
 			if (existingBlobs[i].blnStillBeingTracked == true) {
 				double dblDistance = distanceBetweenPoints(currentFrameBlobs[j].centerPositions.back(), existingBlobs[i].predictedNextPosition);
 
+                                // When blobs combine, we want to assign the combined blob a new number.
+                                // We check for the case that multiple blobs are combining.
+                                if (dblDistance < minimum_blob_separation) {
+                                    number_matches_w_old_blobs++;
+                                }
 				if (dblDistance < dblLeastDistance) {
 					dblLeastDistance = dblDistance;
 					intIndexOfLeastDistance = i;
 				}
 			}
 		}
-		// Combines blobs if their distance is less than a certain threshold
-
-		//if (dblLeastDistance < currentFrameBlobs[j].dblCurrentDiagonalSize * .5) { //relative
+                
+		// Associate old and new blobs if distance is less than a certain threshold
 		if (dblLeastDistance < minimum_blob_separation) {//absolute
-			// To make this more robust, we can add another check. This time for drastic size changes:
-			// We do not yet implement it since that would require testing to make sure it doesn't hurt anything else:
-			//if(cv::contourArea(currentFrameBlob.currentContour) / cv::contourArea(existingBlobs[intIndexOfLeastDistance].currentContour) > 0.5
-				   //&& cv::contourArea(currentFrameBlob.currentContour) / cv::contourArea(existingBlobs[intIndexOfLeastDistance].currentContour) < 2.0)
-			//{	 
 			addBlobToExistingBlobs(currentFrameBlobs[j], existingBlobs, intIndexOfLeastDistance);
-			//}
-		}
+                // If 2 or more blobs just merged, retire the old blob ID number, and 
+                // create a new blob ID number for the new blob
+                // This is done by checking the number of neighboring old blobs
+                // If there is more than 1 match, AND number of current blobs has decreased
+                // since the last frame, a new ID is given.
+                    if (number_matches_w_old_blobs > 1) {
+                        if ( currentFrameBlobs.size() < existingBlobs.size() ) {
+                            existingBlobs[intIndexOfLeastDistance].blnStillBeingTracked = false;
+                            addNewBlob(currentFrameBlobs[j], existingBlobs);
+                       }
+                    }
+                }
 		else {
 			addNewBlob(currentFrameBlobs[j], existingBlobs);
 		}
 
+                number_matches_w_old_blobs = 0;
+                number_matches_w_new_blobs = 0;
 	}
 
 	for (unsigned int i = 0; i < existingBlobs.size(); i++) {
@@ -556,6 +574,11 @@ void drawBlobInfoOnImage(std::vector<Blob> &blobs, cv::Mat &imgFrame1Copy) {
 			int intFontThickness = (int)std::round(dblFontScale * 1.0);
 
 			cv::putText(imgFrame1Copy, std::to_string(i), blobs[i].centerPositions.back(), intFontFace, dblFontScale, SCALAR_GREEN, intFontThickness);
+
+                        /* Print the blob info */
+                        output << to_string(i) << " ";
+                        output << blobs[i].centerPositions.back().x << ".0 ";
+                        output << blobs[i].centerPositions.back().y << ".0 ";
 		}
 	}
 }
