@@ -14,3 +14,6 @@ for value in 16 26 20 21; do
 done
 
 gpio -g write 16 1
+gpio -g write 26 1
+gpio -g write 20 1
+gpio -g write 21 1
